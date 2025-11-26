@@ -1,2 +1,381 @@
 # Proyecto-Final-Big-Data
-Este repositorio esta destinado para el proyecto final de Big Data 961
+
+
+# 2. Documentación del Código
+
+```python
+# CODIGO FUNCIONAL PARA PROYECTO FINAL BIG DATA
+# 25 DE NOVIEMBRE DE 2025
+
+"""
+SUPERCAR VOICE SYSTEM - SISTEMA DE CONSULTA POR VOZ
+
+Este sistema permite consultar información detallada de superautos
+mediante reconocimiento de voz o búsqueda tradicional.
+
+Módulos principales:
+- Interfaz gráfica (PyQt5)
+- Reconocimiento de voz (SpeechRecognition)
+- Base de datos SQLite
+- Sistema de búsqueda aproximada
+"""
+
+# main.py
+import sys
+import sqlite3
+import threading
+import time
+
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
+    QHBoxLayout, QFrame, QLineEdit, QListWidget, QMessageBox,
+    QProgressBar
+)
+from PyQt5.QtGui import QFont, QPixmap, QPalette, QLinearGradient, QColor
+from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
+
+import speech_recognition as sr
+
+# ============================================================
+#  MÓDULO DE BASE DE DATOS
+# ============================================================
+DB_PATH = "supercars.db"
+
+def crear_y_poblar_bd():
+    """
+    Crea la base de datos SQLite y popula con datos iniciales.
+    
+    Estructura de la tabla:
+    - id: Identificador único
+    - nombre: Nombre completo del auto (clave de búsqueda)
+    - marca: Fabricante del vehículo
+    - modelo: Modelo específico
+    - year: Año de fabricación
+    - velocidad_max: Velocidad máxima en km/h
+    - cero_cien: Aceleración 0-100 km/h
+    - precio: Precio estimado en USD
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS supercars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        nombre TEXT UNIQUE,
+        marca TEXT,
+        modelo TEXT,
+        year TEXT,
+        velocidad_max TEXT,
+        cero_cien TEXT,
+        precio TEXT
+    )
+    """)
+    
+    # Datos iniciales de superautos
+    autos = [
+        ("ferrari 488 gtb", "Ferrari", "488 GTB", "2020", "330 km/h", "3.0 s", "$280,000 USD"),
+        ("lamborghini huracan evo", "Lamborghini", "Huracán Evo", "2021", "325 km/h", "2.9 s", "$310,000 USD"),
+        # ... (resto de los autos)
+    ]
+    
+    cursor.executemany("""
+    INSERT OR IGNORE INTO supercars (nombre, marca, modelo, year, velocidad_max, cero_cien, precio)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    """, autos)
+    conn.commit()
+    conn.close()
+
+def obtener_autos():
+    """
+    Obtiene lista de todos los autos disponibles en la base de datos.
+    
+    Returns:
+        list: Lista de nombres de autos ordenados alfabéticamente
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("SELECT nombre FROM supercars ORDER BY nombre")
+    autos = [row[0] for row in cursor.fetchall()]
+    conn.close()
+    return autos
+
+def buscar_auto_sql(nombre):
+    """
+    Busca un auto específico en la base de datos por nombre.
+    
+    Args:
+        nombre (str): Nombre del auto a buscar
+        
+    Returns:
+        tuple: Tupla con información del auto o None si no se encuentra
+    """
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("""
+        SELECT marca, modelo, year, velocidad_max, cero_cien, precio 
+        FROM supercars WHERE nombre = ?
+    """, (nombre,))
+    result = cursor.fetchone()
+    conn.close()
+    return result
+
+# ============================================================
+#  MÓDULO DE RECONOCIMIENTO DE VOZ
+# ============================================================
+def escuchar_comando(timeout=15, phrase_time_limit=10):
+    """
+    Captura audio del micrófono y lo convierte a texto usando Google Speech Recognition.
+    
+    Args:
+        timeout (int): Tiempo máximo de espera para comenzar a escuchar
+        phrase_time_limit (int): Tiempo máximo de grabación por frase
+        
+    Returns:
+        str: Texto reconocido en minúsculas o código de error:
+             - "ERROR_TIMEOUT": No se detectó voz a tiempo
+             - "ERROR_DESCONOCIDO": No se pudo entender el audio
+             - "ERROR_SERVIDOR": Error del servicio de reconocimiento
+             - "ERROR_GENERAL": Error inesperado
+    """
+    r = sr.Recognizer()
+    r.pause_threshold = 1.0  # Tiempo de silencio para considerar fin de frase
+    r.energy_threshold = 500  # Umbral de sensibilidad del micrófono
+
+    try:
+        with sr.Microphone() as source:
+            print("Ajustando al ruido ambiente... (2 segundos)")
+            r.adjust_for_ambient_noise(source, duration=2)
+            print("Escuchando... (habla ahora)")
+
+            # Capturar audio con parámetros optimizados
+            audio = r.listen(
+                source,
+                timeout=timeout,
+                phrase_time_limit=phrase_time_limit
+            )
+
+        print("Procesando audio...")
+        # Usar reconocimiento de Google con manejo de errores mejorado
+        texto = r.recognize_google(audio, language="es-ES")
+        texto_limpio = texto.strip().lower()
+        print(f"Texto reconocido: '{texto_limpio}'")
+        return texto_limpio
+
+    except sr.WaitTimeoutError:
+        print("Timeout: No se detectó voz a tiempo")
+        return "ERROR_TIMEOUT"
+    except sr.UnknownValueError:
+        print("No se pudo entender el audio")
+        return "ERROR_DESCONOCIDO"
+    except sr.RequestError as e:
+        print(f"Error del servicio: {e}")
+        return "ERROR_SERVIDOR"
+    except Exception as e:
+        print(f"Error general: {e}")
+        return "ERROR_GENERAL"
+
+def buscar_coincidencia_aproximada(texto_hablado, lista_autos):
+    """
+    Busca la mejor coincidencia entre el texto reconocido y la lista de autos.
+    Implementa búsqueda aproximada con múltiples estrategias.
+    
+    Args:
+        texto_hablado (str): Texto obtenido del reconocimiento de voz
+        lista_autos (list): Lista de nombres de autos disponibles
+        
+    Returns:
+        str: Nombre del auto que mejor coincide o None si no hay coincidencia
+    """
+    texto_hablado = texto_hablado.lower().strip()
+
+    # Estrategia 1: Coincidencia exacta o parcial
+    for auto in lista_autos:
+        if auto in texto_hablado or texto_hablado in auto:
+            return auto
+
+    # Estrategia 2: Coincidencia por palabras clave (mínimo 2 palabras)
+    palabras = texto_hablado.split()
+    for auto in lista_autos:
+        coincidencias = sum(1 for palabra in palabras if palabra in auto)
+        if coincidencias >= 2:
+            return auto
+
+    # Estrategia 3: Búsqueda por marca
+    marcas = ["ferrari", "lamborghini", "bugatti", "mclaren", "porsche",
+              "koenigsegg", "pagani", "aston martin", "rimac", "maserati"]
+
+    for marca in marcas:
+        if marca in texto_hablado:
+            # Devolver el primer auto de esa marca
+            for auto in lista_autos:
+                if marca in auto:
+                    return auto
+
+    return None
+
+# ============================================================
+#  CLASE PRINCIPAL DE LA INTERFAZ GRÁFICA
+# ============================================================
+class SupercarVoiceUI(QWidget):
+    """
+    Clase principal que define la interfaz gráfica del sistema.
+    
+    Características:
+    - Diseño moderno con temática automovilística
+    - Animaciones y transiciones suaves
+    - Manejo de eventos de voz en hilos separados
+    - Actualización en tiempo real de la interfaz
+    """
+    
+    def __init__(self):
+        """Inicializa la interfaz y configura todos los componentes."""
+        super().__init__()
+        self.setWindowTitle("🏎️ Supercar Voice System - Ultimate Edition")
+        self.setGeometry(100, 80, 1100, 700)
+        self.setup_ui()
+        self.setup_animations()
+
+    def setup_ui(self):
+        """Configura todos los elementos de la interfaz gráfica."""
+        # Estilos CSS personalizados para la aplicación
+        self.setStyleSheet("""
+            /* Estilos principales definidos en el código original */
+        """)
+        
+        # Diseño principal y configuración de widgets
+        # ... (código de configuración de la UI)
+
+    def setup_animations(self):
+        """Configura las animaciones para mejorar la experiencia de usuario."""
+        self.voice_animation = QPropertyAnimation(self.btn_voz, b"geometry")
+        self.voice_animation.setDuration(500)
+        self.voice_animation.setEasingCurve(QEasingCurve.OutBounce)
+
+        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
+        self.progress_animation.setDuration(5000)
+        self.progress_animation.setStartValue(0)
+        self.progress_animation.setEndValue(100)
+
+    def on_btn_voz_clicked(self):
+        """
+        Maneja el evento de clic en el botón de voz.
+        Inicia el proceso de reconocimiento en un hilo separado.
+        """
+        self.btn_voz.setEnabled(False)
+        self.btn_voz.setText(" ESCUCHANDO... HABLA AHORA")
+        self.estado_voz.setText(" Escuchando... Habla ahora claramente")
+        self.progress_bar.setVisible(True)
+        self.progress_animation.start()
+
+        # Ejecutar reconocimiento en hilo separado para no bloquear la UI
+        thread = threading.Thread(target=self._escuchar_y_buscar, daemon=True)
+        thread.start()
+
+    def _escuchar_y_buscar(self):
+        """
+        Función ejecutada en hilo separado para el reconocimiento de voz.
+        No interactúa directamente con la UI por temas de hilos.
+        """
+        texto = escuchar_comando()
+
+        # Programar actualización de UI en el hilo principal
+        QTimer.singleShot(0, lambda: self._procesar_resultado_voz(texto))
+
+    def _procesar_resultado_voz(self, texto):
+        """
+        Procesa el resultado del reconocimiento de voz y actualiza la UI.
+        Se ejecuta en el hilo principal de Qt.
+        """
+        self.btn_voz.setEnabled(True)
+        self.btn_voz.setText("BUSCAR POR VOZ")
+        self.progress_bar.setVisible(False)
+        self.progress_animation.stop()
+        self.progress_bar.setValue(0)
+
+        # Manejo de diferentes tipos de error
+        if texto.startswith("ERROR_"):
+            self._manejar_error_voz(texto)
+        else:
+            self._manejar_exito_voz(texto)
+
+    def _manejar_error_voz(self, error_code):
+        """Maneja los diferentes códigos de error del reconocimiento de voz."""
+        mensajes_error = {
+            "ERROR_TIMEOUT": ("Tiempo agotado. Habla más rápido", 
+                             "Tiempo de espera agotado. Intenta de nuevo y habla más rápido."),
+            "ERROR_DESCONOCIDO": ("No se entendió. Habla más claro",
+                                 "No se entendió lo que dijiste. Intenta de nuevo más claro."),
+            "ERROR_SERVIDOR": ("Error de conexión",
+                              "Error de servicio de reconocimiento. Revisa tu conexión a internet."),
+            "ERROR_GENERAL": ("Error de micrófono",
+                             "Error al acceder al micrófono. Revisa los permisos.")
+        }
+        
+        estado, mensaje = mensajes_error.get(error_code, ("Error desconocido", "Error inesperado"))
+        self.estado_voz.setText(estado)
+        self.mostrar_mensaje(mensaje)
+
+    def _manejar_exito_voz(self, texto_reconocido):
+        """Maneja el caso de reconocimiento exitoso."""
+        self.estado_voz.setText(f"Reconocido: '{texto_reconocido}'")
+        self.input_buscar.setText(texto_reconocido)
+
+        # Buscar coincidencia aproximada
+        auto_encontrado = buscar_coincidencia_aproximada(texto_reconocido, self.autos_disponibles)
+        if auto_encontrado:
+            self.mostrar_auto(auto_encontrado)
+            self.mostrar_mensaje(f"Auto encontrado: '{auto_encontrado}'")
+        else:
+            self.mostrar_mensaje(f"No se encontró coincidencia para: '{texto_reconocido}'. Intenta con otro nombre.")
+
+    def mostrar_auto(self, nombre_auto):
+        """
+        Muestra la información detallada de un auto en la interfaz.
+        
+        Args:
+            nombre_auto (str): Nombre del auto a mostrar
+        """
+        info = buscar_auto_sql(nombre_auto)
+        if info:
+            marca, modelo, year, vmax, cero100, precio = info
+            # Formatear información en HTML para mejor presentación
+            texto_html = f"""
+                <div style='font-family: "Segoe UI", Arial; color: #ffffff;'>
+                    <h2 style='color: #ff1a1a; margin-bottom: 15px;'>{marca.upper()} {modelo}</h2>
+                    <div style='background: rgba(255, 26, 26, 0.1); padding: 15px; border-radius: 8px;'>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>MARCA:</b> <span style='color: #ffffff;'>{marca}</span></p>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>MODELO:</b> <span style='color: #ffffff;'>{modelo}</span></p>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>AÑO:</b> <span style='color: #ffffff;'>{year}</span></p>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>VELOCIDAD MÁXIMA:</b> <span style='color: #ffffff; font-weight: bold;'>{vmax}</span></p>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>ACELERACIÓN 0-100 km/h:</b> <span style='color: #ffffff; font-weight: bold;'>{cero100}</span></p>
+                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>PRECIO:</b> <span style='color: #00ff00; font-weight: bold;'>{precio}</span></p>
+                    </div>
+                </div>
+            """
+            self.info_label.setText(texto_html)
+        else:
+            self.mostrar_mensaje(f"No se encontró en la base de datos: '{nombre_auto}'")
+
+# ============================================================
+#  FUNCIÓN PRINCIPAL DE EJECUCIÓN
+# ============================================================
+def main():
+    """
+    Función principal que inicia la aplicación.
+    Secuencia de ejecución:
+    1. Crear y poblar base de datos
+    2. Inicializar aplicación Qt
+    3. Configurar estilo de la aplicación
+    4. Mostrar interfaz principal
+    5. Ejecutar loop de eventos
+    """
+    crear_y_poblar_bd()
+
+    app = QApplication(sys.argv)
+    app.setStyle('Fusion')  # Estilo uniforme entre plataformas
+
+    ui = SupercarVoiceUI()
+    ui.show()
+    sys.exit(app.exec_())
+
+if __name__ == "__main__":
+    main()
