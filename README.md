@@ -24,6 +24,10 @@ Paso 1: Clonar o descargar el proyecto
 bash
 git clone <https://github.com/adrianrs1906/Proyecto-Final-Big-Data.git>
 cd supercar-voice-system
+
+     1.1: Primero en un archivo de pycharm ejecutar el codigo donde se encuentra la Base de Datos. Posteriormente, en otro archivo distinto ejecutar el codigo con el modelo. 
+
+
 Paso 2: Crear entorno virtual (recomendado)
 bash
 python -m venv venv
