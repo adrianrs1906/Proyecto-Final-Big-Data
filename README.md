@@ -22,7 +22,7 @@ Conexión a internet (para reconocimiento de voz)
 🔧 Instalación
 Paso 1: Clonar o descargar el proyecto
 bash
-git clone <url-del-repositorio>
+git clone <https://github.com/adrianrs1906/Proyecto-Final-Big-Data.git>
 cd supercar-voice-system
 Paso 2: Crear entorno virtual (recomendado)
 bash
