@@ -1,0 +1,43 @@
+import sqlite3
+
+conn = sqlite3.connect("supercars.db")
+cursor = conn.cursor()
+
+cursor.execute("""
+CREATE TABLE IF NOT EXISTS supercars (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT UNIQUE,
+    marca TEXT,
+    modelo TEXT,
+    year TEXT,
+    velocidad_max TEXT,
+    cero_cien TEXT,
+    precio TEXT
+)
+""")
+
+autos = [
+    ("ferrari 488 gtb", "Ferrari", "488 GTB", "2020", "330 km/h", "3.0 s", "$280,000 USD"),
+    ("lamborghini huracan evo", "Lamborghini", "Huracán Evo", "2021", "325 km/h", "2.9 s", "$310,000 USD"),
+    ("bugatti chiron", "Bugatti", "Chiron", "2022", "420 km/h", "2.3 s", "$3,000,000 USD"),
+    ("mclaren p1", "McLaren", "P1", "2015", "350 km/h", "2.8 s", "$1,350,000 USD"),
+    ("porsche 918 spyder", "Porsche", "918 Spyder", "2015", "345 km/h", "2.6 s", "$850,000 USD"),
+    ("koenigsegg agera rs", "Koenigsegg", "Agera RS", "2017", "447 km/h", "2.5 s", "$2,500,000 USD"),
+    ("pagani huayra", "Pagani", "Huayra", "2016", "383 km/h", "2.8 s", "$3,200,000 USD"),
+    ("aston martin valkyrie", "Aston Martin", "Valkyrie", "2022", "400 km/h", "2.5 s", "$3,000,000 USD"),
+    ("rimac nevera", "Rimac", "Nevera", "2023", "412 km/h", "1.9 s", "$2,200,000 USD"),
+    ("ferrari sf90 stradale", "Ferrari", "SF90 Stradale", "2022", "340 km/h", "2.5 s", "$510,000 USD"),
+    ("lamborghini aventador svj", "Lamborghini", "Aventador SVJ", "2020", "351 km/h", "2.8 s", "$520,000 USD"),
+    ("bugatti divo", "Bugatti", "Divo", "2021", "380 km/h", "2.4 s", "$5,800,000 USD"),
+    ("maserati mc20", "Maserati", "MC20", "2023", "325 km/h", "2.9 s", "$210,000 USD")
+]
+
+cursor.executemany("""
+INSERT OR IGNORE INTO supercars (nombre, marca, modelo, year, velocidad_max, cero_cien, precio)
+VALUES (?, ?, ?, ?, ?, ?, ?)
+""", autos)
+
+conn.commit()
+conn.close()
+
+print("Base de datos supercars.db creada correctamente.")
