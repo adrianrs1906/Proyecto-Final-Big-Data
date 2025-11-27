@@ -1,382 +1,903 @@
-# Proyecto-Final-Big-Data
-
-
-# 2. Documentación del Código
-
-```python
-# CODIGO FUNCIONAL PARA PROYECTO FINAL BIG DATA
-# 25 DE NOVIEMBRE DE 2025
-
 """
-SUPERCAR VOICE SYSTEM - SISTEMA DE CONSULTA POR VOZ
+AutoGUI_automovilistico.py
 
-Este sistema permite consultar información detallada de superautos
-mediante reconocimiento de voz o búsqueda tradicional.
+Versión mejorada del detector de marcas por voz con diseño automovilístico atractivo.
+- Tema oscuro con acentos rojos y naranjas del automovilismo
+- Animaciones de coches interactivos en la interfaz
+- Efectos visuales dinámicos (neumáticos giratorios, luces intermitentes)
+- Ventana redimensionable con diseño responsivo
+- 30 marcas de autos con URL oficiales
+- Botones manuales para abrir sitios, búsqueda por texto y atajos
 
-Módulos principales:
-- Interfaz gráfica (PyQt5)
-- Reconocimiento de voz (SpeechRecognition)
-- Base de datos SQLite
-- Sistema de búsqueda aproximada
+Requisitos:
+- Python 3.8+
+- PyQt5
+- speech_recognition (opcional: la app funciona sin voz si no está disponible)
+
+Guarda este archivo y ejecútalo con: python AutoGUI_automovilistico.py
+
+Nota: Los logos (si tiene) deben llamarse exactamente como la clave en BRANDS (por ejemplo: ferrari.png)
 """
-
-# main.py
+import math
 import sys
-import sqlite3
-import threading
-import time
+import os
+import webbrowser
+import traceback
+import random
+from functools import partial
 
+# Intentamos importar speech_recognition; la app sigue funcionando sin él (solo desactiva la voz)
+try:
+    import speech_recognition as sr
+
+    HAS_SR = True
+except Exception:
+    HAS_SR = False
+
+from PyQt5.QtCore import (
+    Qt, QThread, pyqtSignal, QPropertyAnimation, QRect, QEasingCurve, QTimer, QSize,
+    QPoint, QSequentialAnimationGroup, QParallelAnimationGroup
+)
+from PyQt5.QtGui import QPixmap, QFont, QIcon, QPainter, QColor, QLinearGradient, QRadialGradient, QPen
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
-    QHBoxLayout, QFrame, QLineEdit, QListWidget, QMessageBox,
-    QProgressBar
+    QHBoxLayout, QTextEdit, QFrame, QGridLayout, QSizePolicy, QSpacerItem,
+    QLineEdit, QScrollArea, QComboBox, QMenuBar, QAction, QMessageBox
 )
-from PyQt5.QtGui import QFont, QPixmap, QPalette, QLinearGradient, QColor
-from PyQt5.QtCore import Qt, QTimer, QPropertyAnimation, QEasingCurve
 
-import speech_recognition as sr
+# -----------------------
+# MAPA MARCA -> URL (30 marcas)
+# -----------------------
+BRANDS = {
+    "ferrari": "https://www.ferrari.com/",
+    "lamborghini": "https://www.lamborghini.com/",
+    "bugatti": "https://www.bugatti.com/",
+    "mclaren": "https://www.mclaren.com/",
+    "porsche": "https://www.porsche.com/",
+    "koenigsegg": "https://www.koenigsegg.com/",
+    "pagani": "https://www.pagani.com/",
+    "aston martin": "https://www.astonmartin.com/",
+    "rimac": "https://rimac-automobili.com/",
+    "maserati": "https://www.maserati.com/",
+    "mercedes-benz": "https://www.mercedes-benz.com/",
+    "bmw": "https://www.bmw.com/",
+    "audi": "https://www.audi.com/",
+    "lexus": "https://www.lexus.com/",
+    "toyota": "https://www.toyota-global.com/",
+    "honda": "https://global.honda/",
+    "nissan": "https://www.nissan-global.com/",
+    "ford": "https://www.ford.com/",
+    "chevrolet": "https://www.chevrolet.com/",
+    "dodge": "https://www.dodge.com/",
+    "jaguar": "https://www.jaguar.com/",
+    "land rover": "https://www.landrover.com/",
+    "volvo": "https://www.volvocars.com/",
+    "bentley": "https://www.bentleymotors.com/",
+    "rolls-royce": "https://www.rolls-roycemotorcars.com/",
+    "infiniti": "https://www.infiniti.com/",
+    "acura": "https://www.acura.com/",
+    "subaru": "https://www.subaru-global.com/",
+    "alfa romeo": "https://www.alfaromeo.com/",
+    "citroen": "https://www.citroen.com/"
+}
 
-# ============================================================
-#  MÓDULO DE BASE DE DATOS
-# ============================================================
-DB_PATH = "supercars.db"
+# Normalize keys for detection (we'll look for substrings)
+BRAND_KEYS = list(BRANDS.keys())
 
-def crear_y_poblar_bd():
-    """
-    Crea la base de datos SQLite y popula con datos iniciales.
-    
-    Estructura de la tabla:
-    - id: Identificador único
-    - nombre: Nombre completo del auto (clave de búsqueda)
-    - marca: Fabricante del vehículo
-    - modelo: Modelo específico
-    - year: Año de fabricación
-    - velocidad_max: Velocidad máxima en km/h
-    - cero_cien: Aceleración 0-100 km/h
-    - precio: Precio estimado en USD
-    """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS supercars (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        nombre TEXT UNIQUE,
-        marca TEXT,
-        modelo TEXT,
-        year TEXT,
-        velocidad_max TEXT,
-        cero_cien TEXT,
-        precio TEXT
-    )
-    """)
-    
-    # Datos iniciales de superautos
-    autos = [
-        ("ferrari 488 gtb", "Ferrari", "488 GTB", "2020", "330 km/h", "3.0 s", "$280,000 USD"),
-        ("lamborghini huracan evo", "Lamborghini", "Huracán Evo", "2021", "325 km/h", "2.9 s", "$310,000 USD"),
-        # ... (resto de los autos)
-    ]
-    
-    cursor.executemany("""
-    INSERT OR IGNORE INTO supercars (nombre, marca, modelo, year, velocidad_max, cero_cien, precio)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-    """, autos)
-    conn.commit()
-    conn.close()
 
-def obtener_autos():
-    """
-    Obtiene lista de todos los autos disponibles en la base de datos.
-    
-    Returns:
-        list: Lista de nombres de autos ordenados alfabéticamente
-    """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("SELECT nombre FROM supercars ORDER BY nombre")
-    autos = [row[0] for row in cursor.fetchall()]
-    conn.close()
-    return autos
+# -----------------------
+# HILO DE RECONOCIMIENTO
+# -----------------------
+class VoiceThread(QThread):
+    texto_obtenido = pyqtSignal(str)
+    status = pyqtSignal(str)
 
-def buscar_auto_sql(nombre):
-    """
-    Busca un auto específico en la base de datos por nombre.
-    
-    Args:
-        nombre (str): Nombre del auto a buscar
-        
-    Returns:
-        tuple: Tupla con información del auto o None si no se encuentra
-    """
-    conn = sqlite3.connect(DB_PATH)
-    cursor = conn.cursor()
-    cursor.execute("""
-        SELECT marca, modelo, year, velocidad_max, cero_cien, precio 
-        FROM supercars WHERE nombre = ?
-    """, (nombre,))
-    result = cursor.fetchone()
-    conn.close()
-    return result
+    def run(self):
+        if not HAS_SR:
+            self.status.emit("sr_missing")
+            self.texto_obtenido.emit("")
+            return
 
-# ============================================================
-#  MÓDULO DE RECONOCIMIENTO DE VOZ
-# ============================================================
-def escuchar_comando(timeout=15, phrase_time_limit=10):
-    """
-    Captura audio del micrófono y lo convierte a texto usando Google Speech Recognition.
-    
-    Args:
-        timeout (int): Tiempo máximo de espera para comenzar a escuchar
-        phrase_time_limit (int): Tiempo máximo de grabación por frase
-        
-    Returns:
-        str: Texto reconocido en minúsculas o código de error:
-             - "ERROR_TIMEOUT": No se detectó voz a tiempo
-             - "ERROR_DESCONOCIDO": No se pudo entender el audio
-             - "ERROR_SERVIDOR": Error del servicio de reconocimiento
-             - "ERROR_GENERAL": Error inesperado
-    """
-    r = sr.Recognizer()
-    r.pause_threshold = 1.0  # Tiempo de silencio para considerar fin de frase
-    r.energy_threshold = 500  # Umbral de sensibilidad del micrófono
+        try:
+            self.status.emit("iniciando micrófono")
+            recognizer = sr.Recognizer()
+            with sr.Microphone() as source:
+                recognizer.adjust_for_ambient_noise(source, duration=0.8)
+                self.status.emit("escuchando")
+                audio = recognizer.listen(source, timeout=6, phrase_time_limit=6)
+                self.status.emit("procesando")
+                texto = recognizer.recognize_google(audio, language="es-MX")
+                self.texto_obtenido.emit(texto)
+        except sr.WaitTimeoutError:
+            self.status.emit("timeout")
+            self.texto_obtenido.emit("")
+        except sr.UnknownValueError:
+            self.status.emit("unknown")
+            self.texto_obtenido.emit("")
+        except sr.RequestError as e:
+            self.status.emit(f"request_error:{e}")
+            self.texto_obtenido.emit("")
+        except Exception:
+            traceback.print_exc()
+            self.status.emit("error")
+            self.texto_obtenido.emit("")
 
-    try:
-        with sr.Microphone() as source:
-            print("Ajustando al ruido ambiente... (2 segundos)")
-            r.adjust_for_ambient_noise(source, duration=2)
-            print("Escuchando... (habla ahora)")
 
-            # Capturar audio con parámetros optimizados
-            audio = r.listen(
-                source,
-                timeout=timeout,
-                phrase_time_limit=phrase_time_limit
-            )
+# -----------------------
+# WIDGETS PERSONALIZADOS CON ANIMACIONES
+# -----------------------
+class AnimatedCar(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(60, 30)
+        self.angle = 0
+        self.light_on = False
+        self.light_timer = QTimer(self)
+        self.light_timer.timeout.connect(self.toggle_light)
+        self.light_timer.start(500)  # Parpadeo cada 500ms
 
-        print("Procesando audio...")
-        # Usar reconocimiento de Google con manejo de errores mejorado
-        texto = r.recognize_google(audio, language="es-ES")
-        texto_limpio = texto.strip().lower()
-        print(f"Texto reconocido: '{texto_limpio}'")
-        return texto_limpio
+        # Animación de movimiento
+        self.move_animation = QPropertyAnimation(self, b"pos")
+        self.move_animation.setDuration(3000)
+        self.move_animation.setStartValue(QPoint(-60, random.randint(10, parent.height() - 40) if parent else 50))
+        self.move_animation.setEndValue(
+            QPoint(parent.width() + 60 if parent else 500, random.randint(10, parent.height() - 40) if parent else 50))
+        self.move_animation.finished.connect(self.restart_animation)
 
-    except sr.WaitTimeoutError:
-        print("Timeout: No se detectó voz a tiempo")
-        return "ERROR_TIMEOUT"
-    except sr.UnknownValueError:
-        print("No se pudo entender el audio")
-        return "ERROR_DESCONOCIDO"
-    except sr.RequestError as e:
-        print(f"Error del servicio: {e}")
-        return "ERROR_SERVIDOR"
-    except Exception as e:
-        print(f"Error general: {e}")
-        return "ERROR_GENERAL"
+        # Animación de neumáticos giratorios
+        self.wheel_animation = QPropertyAnimation(self, b"angle")
+        self.wheel_animation.setDuration(300)
+        self.wheel_animation.setStartValue(0)
+        self.wheel_animation.setEndValue(360)
+        self.wheel_animation.setLoopCount(-1)  # Infinito
 
-def buscar_coincidencia_aproximada(texto_hablado, lista_autos):
-    """
-    Busca la mejor coincidencia entre el texto reconocido y la lista de autos.
-    Implementa búsqueda aproximada con múltiples estrategias.
-    
-    Args:
-        texto_hablado (str): Texto obtenido del reconocimiento de voz
-        lista_autos (list): Lista de nombres de autos disponibles
-        
-    Returns:
-        str: Nombre del auto que mejor coincide o None si no hay coincidencia
-    """
-    texto_hablado = texto_hablado.lower().strip()
+        self.move_animation.start()
+        self.wheel_animation.start()
 
-    # Estrategia 1: Coincidencia exacta o parcial
-    for auto in lista_autos:
-        if auto in texto_hablado or texto_hablado in auto:
-            return auto
+    def toggle_light(self):
+        self.light_on = not self.light_on
+        self.update()
 
-    # Estrategia 2: Coincidencia por palabras clave (mínimo 2 palabras)
-    palabras = texto_hablado.split()
-    for auto in lista_autos:
-        coincidencias = sum(1 for palabra in palabras if palabra in auto)
-        if coincidencias >= 2:
-            return auto
+    def restart_animation(self):
+        parent = self.parent()
+        if parent:
+            self.move_animation.setStartValue(QPoint(-60, random.randint(10, parent.height() - 40)))
+            self.move_animation.setEndValue(QPoint(parent.width() + 60, random.randint(10, parent.height() - 40)))
+            self.move_animation.start()
 
-    # Estrategia 3: Búsqueda por marca
-    marcas = ["ferrari", "lamborghini", "bugatti", "mclaren", "porsche",
-              "koenigsegg", "pagani", "aston martin", "rimac", "maserati"]
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
 
-    for marca in marcas:
-        if marca in texto_hablado:
-            # Devolver el primer auto de esa marca
-            for auto in lista_autos:
-                if marca in auto:
-                    return auto
+        # Cuerpo del coche
+        painter.setBrush(QColor(220, 50, 50))  # Rojo deportivo
+        painter.drawRoundedRect(5, 10, 50, 12, 5, 5)
 
-    return None
+        # Cabina
+        painter.setBrush(QColor(40, 40, 40))
+        painter.drawRoundedRect(30, 5, 25, 10, 3, 3)
 
-# ============================================================
-#  CLASE PRINCIPAL DE LA INTERFAZ GRÁFICA
-# ============================================================
-class SupercarVoiceUI(QWidget):
-    """
-    Clase principal que define la interfaz gráfica del sistema.
-    
-    Características:
-    - Diseño moderno con temática automovilística
-    - Animaciones y transiciones suaves
-    - Manejo de eventos de voz en hilos separados
-    - Actualización en tiempo real de la interfaz
-    """
-    
+        # Neumáticos (giratorios)
+        painter.setBrush(QColor(20, 20, 20))
+        painter.save()
+        painter.translate(15, 22)
+        painter.rotate(self.angle)
+        painter.drawEllipse(-5, -5, 10, 10)
+        painter.restore()
+
+        painter.save()
+        painter.translate(45, 22)
+        painter.rotate(self.angle)
+        painter.drawEllipse(-5, -5, 10, 10)
+        painter.restore()
+
+        # Luces delanteras
+        if self.light_on:
+            painter.setBrush(QColor(255, 255, 200))
+        else:
+            painter.setBrush(QColor(100, 100, 80))
+        painter.drawEllipse(50, 12, 8, 6)
+
+        # Luces traseras
+        painter.setBrush(QColor(255, 40, 40))
+        painter.drawEllipse(2, 12, 8, 6)
+
+
+class SpeedometerWidget(QWidget):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedSize(120, 120)
+        self.speed = 0
+        self.target_speed = 0
+        self.speed_timer = QTimer(self)
+        self.speed_timer.timeout.connect(self.update_speed)
+        self.speed_timer.start(50)
+
+    def set_speed(self, speed):
+        self.target_speed = speed
+
+    def update_speed(self):
+        if self.speed < self.target_speed:
+            self.speed += 1
+        elif self.speed > self.target_speed:
+            self.speed -= 1
+        self.update()
+
+    def paintEvent(self, event):
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+
+        # Fondo del velocímetro
+        gradient = QRadialGradient(60, 60, 60)
+        gradient.setColorAt(0, QColor(50, 50, 50))
+        gradient.setColorAt(1, QColor(20, 20, 20))
+        painter.setBrush(gradient)
+        painter.drawEllipse(5, 5, 110, 110)
+
+        # Marcas del velocímetro
+        painter.setPen(QColor(200, 200, 200))
+        for i in range(0, 240, 30):
+            angle = i - 150
+            rad = angle * 3.14159 / 180
+            x1 = 60 + 45 * math.cos(rad)
+            y1 = 60 + 45 * math.sin(rad)
+            x2 = 60 + 55 * math.cos(rad)
+            y2 = 60 + 55 * math.sin(rad)
+            painter.drawLine(int(x1), int(y1), int(x2), int(y2))
+
+            # Números
+            if i <= 180:
+                num = str(i // 3)
+                x3 = 60 + 35 * math.cos(rad)
+                y3 = 60 + 35 * math.sin(rad)
+                painter.drawText(int(x3) - 5, int(y3) + 5, num)
+
+        # Aguja
+        angle = (self.speed * 2.4) - 150
+        rad = angle * 3.14159 / 180
+        x = 60 + 40 * math.cos(rad)
+        y = 60 + 40 * math.sin(rad)
+        painter.setPen(QPen(QColor(255, 50, 50), 3))
+        painter.drawLine(60, 60, int(x), int(y))
+
+        # Centro
+        painter.setBrush(QColor(255, 50, 50))
+        painter.drawEllipse(57, 57, 6, 6)
+
+        # Valor numérico
+        painter.setPen(QColor(255, 255, 255))
+        painter.drawText(45, 75, 30, 20, Qt.AlignCenter, str(self.speed))
+
+
+# -----------------------
+# COMPONENTE PRINCIPAL
+# -----------------------
+class AutoGUI(QWidget):
     def __init__(self):
-        """Inicializa la interfaz y configura todos los componentes."""
         super().__init__()
-        self.setWindowTitle("🏎️ Supercar Voice System - Ultimate Edition")
-        self.setGeometry(100, 80, 1100, 700)
-        self.setup_ui()
-        self.setup_animations()
+        self.setWindowTitle("🏁 AutoNavigator — Detector de Marcas (Edición Deportiva)")
+        self.setWindowIcon(QIcon())
+        self.resize(1100, 700)  # ventana redimensionable
+        self.cars = []
+        self._setup_ui()
 
-    def setup_ui(self):
-        """Configura todos los elementos de la interfaz gráfica."""
-        # Estilos CSS personalizados para la aplicación
+    def _setup_ui(self):
+        # Estilos globales: tema automovilístico con acentos rojos y negros
         self.setStyleSheet("""
-            /* Estilos principales definidos en el código original */
+            QWidget#root { 
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #0a0a0f, stop:0.5 #151520, stop:1 #1a1a25);
+                color: white;
+            }
+            QLabel.title { 
+                color: white; 
+                font-weight: 900; 
+                font-size: 22px;
+            }
+            QLabel.brandName { 
+                color: #ff6b35; 
+                font-weight: 700; 
+                font-size: 14px;
+            }
+            QPushButton {
+                background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #444, stop:1 #222);
+                color: white;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 8px 15px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #ff6b35, stop:1 #e55627);
+                border: 1px solid #ff8c5a;
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #e55627, stop:1 #c44115);
+            }
+            QLineEdit {
+                background: rgba(30, 30, 40, 200);
+                border: 2px solid #555;
+                border-radius: 8px;
+                padding: 10px;
+                color: white;
+                font-size: 14px;
+                selection-background-color: #ff6b35;
+            }
+            QLineEdit:focus {
+                border: 2px solid #ff6b35;
+            }
+            QTextEdit {
+                background: rgba(10, 10, 20, 180);
+                border: 1px solid #333;
+                border-radius: 8px;
+                color: #cfeeea;
+                font-family: 'Consolas';
+                font-size: 13px;
+                padding: 8px;
+            }
+            QComboBox {
+                background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #444, stop:1 #222);
+                color: white;
+                border: 1px solid #555;
+                border-radius: 5px;
+                padding: 5px;
+                min-width: 120px;
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QComboBox QAbstractItemView {
+                background: #222;
+                color: white;
+                selection-background-color: #ff6b35;
+            }
+            QScrollArea {
+                background: transparent;
+                border: 1px solid #333;
+                border-radius: 8px;
+            }
+            QMenuBar {
+                background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #444, stop:1 #222);
+                color: white;
+                border-bottom: 1px solid #333;
+            }
+            QMenuBar::item {
+                background: transparent;
+                padding: 5px 10px;
+            }
+            QMenuBar::item:selected {
+                background: #ff6b35;
+            }
+            QMenu {
+                background: #222;
+                color: white;
+                border: 1px solid #444;
+            }
+            QMenu::item {
+                padding: 5px 20px;
+            }
+            QMenu::item:selected {
+                background: #ff6b35;
+            }
         """)
-        
-        # Diseño principal y configuración de widgets
-        # ... (código de configuración de la UI)
+        self.setObjectName("root")
 
-    def setup_animations(self):
-        """Configura las animaciones para mejorar la experiencia de usuario."""
-        self.voice_animation = QPropertyAnimation(self.btn_voz, b"geometry")
-        self.voice_animation.setDuration(500)
-        self.voice_animation.setEasingCurve(QEasingCurve.OutBounce)
+        # Layout principal
+        main_layout = QVBoxLayout(self)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(10)
 
-        self.progress_animation = QPropertyAnimation(self.progress_bar, b"value")
-        self.progress_animation.setDuration(5000)
-        self.progress_animation.setStartValue(0)
-        self.progress_animation.setEndValue(100)
+        # Menu bar (opciones rápidas)
+        menu = QMenuBar(self)
+        view_menu = menu.addMenu("Ventana")
+        resize_small = QAction("Compacta (800x480)", self)
+        resize_med = QAction("Mediana (1100x700)", self)
+        resize_big = QAction("Grande (1400x900)", self)
+        resize_small.triggered.connect(lambda: self.resize(800, 480))
+        resize_med.triggered.connect(lambda: self.resize(1100, 700))
+        resize_big.triggered.connect(lambda: self.resize(1400, 900))
+        view_menu.addAction(resize_small)
+        view_menu.addAction(resize_med)
+        view_menu.addAction(resize_big)
 
-    def on_btn_voz_clicked(self):
-        """
-        Maneja el evento de clic en el botón de voz.
-        Inicia el proceso de reconocimiento en un hilo separado.
-        """
-        self.btn_voz.setEnabled(False)
-        self.btn_voz.setText(" ESCUCHANDO... HABLA AHORA")
-        self.estado_voz.setText(" Escuchando... Habla ahora claramente")
-        self.progress_bar.setVisible(True)
-        self.progress_animation.start()
+        help_menu = menu.addMenu("Ayuda")
+        about_action = QAction("Acerca de", self)
+        about_action.triggered.connect(self._show_about)
+        help_menu.addAction(about_action)
 
-        # Ejecutar reconocimiento en hilo separado para no bloquear la UI
-        thread = threading.Thread(target=self._escuchar_y_buscar, daemon=True)
-        thread.start()
+        main_layout.addWidget(menu)
 
-    def _escuchar_y_buscar(self):
-        """
-        Función ejecutada en hilo separado para el reconocimiento de voz.
-        No interactúa directamente con la UI por temas de hilos.
-        """
-        texto = escuchar_comando()
+        # Título principal con efecto de neón
+        title_container = QHBoxLayout()
+        title = QLabel("🏁 AUTO NAVIGATOR — DETECTOR DE MARCAS DEPORTIVAS")
+        title.setObjectName("mainTitle")
+        title.setProperty("class", "title")
+        title.setFont(QFont("Arial Black", 24, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        title.setStyleSheet("""
+            QLabel {
+                color: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #ff3333, stop:0.5 #ff9933, stop:1 #ff3333);
+                background: transparent;
+                padding: 10px;
+                border-radius: 10px;
+            }
+        """)
+        title_container.addWidget(title)
+        main_layout.addLayout(title_container)
 
-        # Programar actualización de UI en el hilo principal
-        QTimer.singleShot(0, lambda: self._procesar_resultado_voz(texto))
+        # Marco central
+        frame = QFrame(self)
+        frame.setStyleSheet("""
+            QFrame { 
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 rgba(20,20,30,220), stop:1 rgba(30,30,40,220)); 
+                border-radius: 15px;
+                border: 1px solid #444;
+            }
+        """)
+        frame_layout = QGridLayout(frame)
+        frame_layout.setContentsMargins(20, 20, 20, 20)
+        frame_layout.setSpacing(20)
 
-    def _procesar_resultado_voz(self, texto):
-        """
-        Procesa el resultado del reconocimiento de voz y actualiza la UI.
-        Se ejecuta en el hilo principal de Qt.
-        """
-        self.btn_voz.setEnabled(True)
-        self.btn_voz.setText("BUSCAR POR VOZ")
-        self.progress_bar.setVisible(False)
-        self.progress_animation.stop()
-        self.progress_bar.setValue(0)
+        # ========== PANEL IZQUIERDO: Controles y comandos ==========
+        left = QVBoxLayout()
+        left.setSpacing(15)
 
-        # Manejo de diferentes tipos de error
-        if texto.startswith("ERROR_"):
-            self._manejar_error_voz(texto)
+        subtitle = QLabel("Diga el nombre de la marca o escríbala. Se abrirá su sitio oficial.")
+        subtitle.setStyleSheet("color: #bfc9cc; font-size: 14px;")
+        subtitle.setWordWrap(True)
+        left.addWidget(subtitle)
+
+        # Controles: botón de voz grande + indicador animado
+        controls_row = QHBoxLayout()
+        controls_row.setSpacing(15)
+
+        self.btn_voice = QPushButton("🎤 ACTIVAR COMANDO DE VOZ")
+        self.btn_voice.setCursor(Qt.PointingHandCursor)
+        self.btn_voice.setFixedHeight(60)
+        self.btn_voice.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.btn_voice.setStyleSheet("""
+            QPushButton { 
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #ff3333, stop:0.5 #ff6b35, stop:1 #ff3333); 
+                color: white; 
+                border-radius: 10px; 
+                font-weight: bold;
+                font-size: 16px;
+                border: 2px solid #ff9966;
+            }
+            QPushButton:hover {
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #ff5555, stop:0.5 #ff8c5a, stop:1 #ff5555);
+            }
+            QPushButton:pressed {
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 #e52727, stop:0.5 #e55627, stop:1 #e52727);
+            }
+        """)
+        self.btn_voice.clicked.connect(self._on_voice_pressed)
+        controls_row.addWidget(self.btn_voice)
+
+        # Indicador de escucha con diseño de semáforo
+        self.listen_indicator = QLabel()
+        self.listen_indicator.setFixedSize(60, 60)
+        self._set_indicator_idle()
+        controls_row.addWidget(self.listen_indicator)
+
+        left.addLayout(controls_row)
+
+        # Entrada manual
+        manual_row = QHBoxLayout()
+        manual_row.setSpacing(10)
+        self.manual_input = QLineEdit()
+        self.manual_input.setPlaceholderText("Escribe aquí la marca y presiona Enter...")
+        self.manual_input.returnPressed.connect(self._on_manual_enter)
+        manual_row.addWidget(self.manual_input)
+
+        self.btn_open_manual = QPushButton("ABRIR")
+        self.btn_open_manual.setFixedWidth(100)
+        self.btn_open_manual.setFixedHeight(50)
+        self.btn_open_manual.clicked.connect(self._on_open_manual_clicked)
+        manual_row.addWidget(self.btn_open_manual)
+
+        left.addLayout(manual_row)
+
+        # Estado y log
+        self.status_label = QLabel("Estado: listo")
+        self.status_label.setStyleSheet("color: #b6e3e1; font-size: 14px; font-weight: bold;")
+        left.addWidget(self.status_label)
+
+        self.log_text = QTextEdit()
+        self.log_text.setReadOnly(True)
+        self.log_text.setFixedHeight(180)
+        left.addWidget(self.log_text)
+
+        left.addItem(QSpacerItem(20, 20, QSizePolicy.Minimum, QSizePolicy.Expanding))
+
+        # ========== PANEL DERECHO: Resultados + marcas ==========
+        right = QVBoxLayout()
+        right.setSpacing(15)
+
+        result_title_row = QHBoxLayout()
+        box_title = QLabel("RESULTADO")
+        box_title.setFont(QFont("Arial", 16, QFont.Bold))
+        box_title.setStyleSheet("color: #ff6b35")
+        result_title_row.addWidget(box_title)
+        result_title_row.addItem(QSpacerItem(20, 20, QSizePolicy.Expanding, QSizePolicy.Minimum))
+
+        # Selector de tema
+        self.theme_combo = QComboBox()
+        self.theme_combo.addItems(["Tema Deportivo", "Tema Clásico", "Tema Lujo"])
+        self.theme_combo.currentIndexChanged.connect(self._on_theme_change)
+        result_title_row.addWidget(self.theme_combo)
+
+        right.addLayout(result_title_row)
+
+        self.recognized_label = QLabel("Aquí aparecerá lo que dijiste...")
+        self.recognized_label.setWordWrap(True)
+        self.recognized_label.setFont(QFont("Segoe UI", 12))
+        self.recognized_label.setStyleSheet("""
+            color: #a8fff0; 
+            background: qlineargradient(x1:0 y1:0, x2:1 y2:0, stop:0 rgba(255,107,53,80), stop:1 rgba(40,40,60,150)); 
+            padding: 15px; 
+            border-radius: 10px;
+            border: 1px solid #555;
+        """)
+        self.recognized_label.setFixedHeight(100)
+        right.addWidget(self.recognized_label)
+
+        # Marca detectada y logo animado
+        det_layout = QHBoxLayout()
+        det_layout.setSpacing(15)
+
+        marca_container = QVBoxLayout()
+        self.marca_label = QLabel("Marca detectada: —")
+        self.marca_label.setFont(QFont("Segoe UI", 14, QFont.Bold))
+        self.marca_label.setStyleSheet("color: #ffd36b;")
+        marca_container.addWidget(self.marca_label)
+
+        # Añadir velocímetro
+        self.speedometer = SpeedometerWidget()
+        marca_container.addWidget(self.speedometer, alignment=Qt.AlignCenter)
+        det_layout.addLayout(marca_container)
+
+        self.logo_label = QLabel()
+        self.logo_label.setFixedSize(200, 120)
+        self.logo_label.setStyleSheet("""
+            background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 rgba(40,40,50,150), stop:1 rgba(60,60,70,150));
+            border-radius: 10px;
+            border: 1px solid #555;
+        """)
+        self.logo_label.setAlignment(Qt.AlignCenter)
+        det_layout.addWidget(self.logo_label, alignment=Qt.AlignRight)
+
+        right.addLayout(det_layout)
+
+        # Panel desplazable con botones de marcas (acceso manual rápido)
+        brands_title = QLabel("ACCESO RÁPIDO A MARCAS")
+        brands_title.setFont(QFont("Arial", 14, QFont.Bold))
+        brands_title.setStyleSheet("color: #ff6b35; padding: 5px;")
+        right.addWidget(brands_title)
+
+        brands_widget = QWidget()
+        brands_layout = QGridLayout(brands_widget)
+        brands_layout.setSpacing(10)
+        brands_layout.setContentsMargins(10, 10, 10, 10)
+
+        # Crear botones para cada marca con diseño mejorado
+        row = 0
+        col = 0
+        for idx, key in enumerate(BRAND_KEYS):
+            name = key.title()
+            btn = QPushButton(name)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFixedHeight(40)
+            btn.setProperty("brand_key", key)
+            btn.clicked.connect(partial(self._open_brand, key))
+            btn.setToolTip(BRANDS[key])
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #444, stop:1 #222);
+                    color: white;
+                    border: 1px solid #555;
+                    border-radius: 5px;
+                    font-weight: bold;
+                }
+                QPushButton:hover {
+                    background: qlineargradient(x1:0 y1:0, x2:0 y2:1, stop:0 #ff6b35, stop:1 #e55627);
+                    border: 1px solid #ff8c5a;
+                }
+            """)
+            brands_layout.addWidget(btn, row, col)
+            col += 1
+            if col >= 3:
+                col = 0
+                row += 1
+
+        scroll = QScrollArea()
+        scroll.setWidget(brands_widget)
+        scroll.setWidgetResizable(True)
+        scroll.setFixedHeight(200)
+        right.addWidget(scroll)
+
+        # Botones de acción extra
+        actions_row = QHBoxLayout()
+        self.btn_show_all = QPushButton("VER TODAS LAS URLS")
+        self.btn_show_all.clicked.connect(self._show_all_urls)
+        actions_row.addWidget(self.btn_show_all)
+
+        self.btn_clear_log = QPushButton("LIMPIAR LOG")
+        self.btn_clear_log.clicked.connect(lambda: self.log_text.clear())
+        actions_row.addWidget(self.btn_clear_log)
+
+        right.addLayout(actions_row)
+
+        # Agregamos al layout del frame
+        frame_layout.addLayout(left, 0, 0)
+        frame_layout.addLayout(right, 0, 1)
+
+        main_layout.addWidget(frame)
+
+        # Animaciones / timers
+        self._pulse_timer = QTimer()
+        self._pulse_timer.timeout.connect(self._pulse_indicator)
+        self._pulse_state = False
+
+        self.voice_thread = None
+
+        # Crear coches animados
+        self.create_animated_cars()
+
+    def create_animated_cars(self):
+        # Crear varios coches animados que se mueven por la interfaz
+        for i in range(3):
+            car = AnimatedCar(self)
+            self.cars.append(car)
+            car.show()
+
+    def resizeEvent(self, event):
+        # Cuando se redimensiona la ventana, reiniciamos las animaciones de los coches
+        super().resizeEvent(event)
+        for car in self.cars:
+            car.restart_animation()
+
+    # -----------------------
+    # INDICADOR VISUAL
+    # -----------------------
+    def _set_indicator_idle(self):
+        self.listen_indicator.setStyleSheet("""
+            QLabel { 
+                border-radius: 30px; 
+                background: qradialgradient(cx:0.5, cy:0.5, radius: 1, fx:0.5, fy:0.5, stop:0 #333, stop:1 #222);
+                border: 3px solid #555;
+            }
+        """)
+
+    def _set_indicator_listening(self):
+        self.listen_indicator.setStyleSheet("""
+            QLabel { 
+                border-radius: 30px; 
+                background: qradialgradient(cx:0.5, cy:0.5, radius: 1, fx:0.5, fy:0.5, stop:0 #ff3333, stop:1 #cc0000);
+                border: 3px solid #ff9966;
+            }
+        """)
+
+    def _pulse_indicator(self):
+        self._pulse_state = not self._pulse_state
+        if self._pulse_state:
+            self.listen_indicator.setStyleSheet("""
+                QLabel { 
+                    border-radius: 30px; 
+                    background: qradialgradient(cx:0.5, cy:0.5, radius: 1, fx:0.5, fy:0.5, stop:0 #ff5555, stop:1 #ff0000);
+                    border: 3px solid #ffaa77;
+                }
+            """)
         else:
-            self._manejar_exito_voz(texto)
+            self._set_indicator_listening()
 
-    def _manejar_error_voz(self, error_code):
-        """Maneja los diferentes códigos de error del reconocimiento de voz."""
-        mensajes_error = {
-            "ERROR_TIMEOUT": ("Tiempo agotado. Habla más rápido", 
-                             "Tiempo de espera agotado. Intenta de nuevo y habla más rápido."),
-            "ERROR_DESCONOCIDO": ("No se entendió. Habla más claro",
-                                 "No se entendió lo que dijiste. Intenta de nuevo más claro."),
-            "ERROR_SERVIDOR": ("Error de conexión",
-                              "Error de servicio de reconocimiento. Revisa tu conexión a internet."),
-            "ERROR_GENERAL": ("Error de micrófono",
-                             "Error al acceder al micrófono. Revisa los permisos.")
-        }
-        
-        estado, mensaje = mensajes_error.get(error_code, ("Error desconocido", "Error inesperado"))
-        self.estado_voz.setText(estado)
-        self.mostrar_mensaje(mensaje)
+    # -----------------------
+    # EVENTOS DE VOZ / MANUAL
+    # -----------------------
+    def _on_voice_pressed(self):
+        # Si speech_recognition no está disponible, avisamos
+        if not HAS_SR:
+            self.log_text.append(
+                ">>> speech_recognition no está disponible. Instala 'speechrecognition' para usar voz.")
+            QMessageBox.information(self, "Voz no disponible",
+                                    "El paquete 'speech_recognition' no está instalado. La aplicación seguirá funcionando en modo manual.")
+            return
 
-    def _manejar_exito_voz(self, texto_reconocido):
-        """Maneja el caso de reconocimiento exitoso."""
-        self.estado_voz.setText(f"Reconocido: '{texto_reconocido}'")
-        self.input_buscar.setText(texto_reconocido)
+        # prevenir reentradas
+        if self.voice_thread and self.voice_thread.isRunning():
+            return
 
-        # Buscar coincidencia aproximada
-        auto_encontrado = buscar_coincidencia_aproximada(texto_reconocido, self.autos_disponibles)
-        if auto_encontrado:
-            self.mostrar_auto(auto_encontrado)
-            self.mostrar_mensaje(f"Auto encontrado: '{auto_encontrado}'")
+        # iniciar hilo
+        self.status_label.setText("Estado: preparándose...")
+        self.log_text.append(">>> Iniciando escucha por voz...")
+        self._set_indicator_listening()
+        self._pulse_timer.start(300)
+        self.speedometer.set_speed(80)  # Velocímetro a 80
+
+        self.voice_thread = VoiceThread()
+        self.voice_thread.texto_obtenido.connect(self._on_texto_obtenido)
+        self.voice_thread.status.connect(self._on_status_update)
+        self.voice_thread.start()
+
+    def _on_manual_enter(self):
+        texto = self.manual_input.text().strip()
+        if texto:
+            self.log_text.append(f">>> Entrada manual: {texto}")
+            self.recognized_label.setText(texto)
+            self._handle_recognized_text(texto)
+
+    def _on_open_manual_clicked(self):
+        texto = self.manual_input.text().strip()
+        if texto:
+            marca = self._detectar_marca(texto)
+            if marca:
+                self._open_brand(marca)
+            else:
+                # si no se detecta, ofrecer búsqueda directa
+                self.log_text.append(
+                    ">>> No se detectó marca en el texto. Puedes escribir exactamente la marca o usar los botones.")
+
+    def _on_status_update(self, s):
+        if s == "escuchando":
+            self.status_label.setText("Estado: escuchando...")
+            self.speedometer.set_speed(120)  # Velocímetro a 120
+        elif s == "procesando":
+            self.status_label.setText("Estado: procesando audio...")
+            self.speedometer.set_speed(160)  # Velocímetro a 160
+        elif s == "iniciando micrófono":
+            self.status_label.setText("Estado: inicializando micrófono...")
+        elif s == "timeout":
+            self.status_label.setText("Estado: tiempo de escucha agotado.")
+            self.speedometer.set_speed(40)  # Velocímetro a 40
+        elif s == "unknown":
+            self.status_label.setText("Estado: no se entendió lo dicho.")
+            self.speedometer.set_speed(20)  # Velocímetro a 20
+        elif s.startswith("request_error"):
+            self.status_label.setText("Estado: error de red con el servicio de voz.")
+            self.speedometer.set_speed(0)  # Velocímetro a 0
+        elif s == "sr_missing":
+            self.status_label.setText("Estado: speech_recognition no instalado.")
+            self.speedometer.set_speed(0)  # Velocímetro a 0
+        elif s == "error":
+            self.status_label.setText("Estado: error interno.")
+            self.speedometer.set_speed(0)  # Velocímetro a 0
         else:
-            self.mostrar_mensaje(f"No se encontró coincidencia para: '{texto_reconocido}'. Intenta con otro nombre.")
+            self.status_label.setText(f"Estado: {s}")
 
-    def mostrar_auto(self, nombre_auto):
-        """
-        Muestra la información detallada de un auto en la interfaz.
-        
-        Args:
-            nombre_auto (str): Nombre del auto a mostrar
-        """
-        info = buscar_auto_sql(nombre_auto)
-        if info:
-            marca, modelo, year, vmax, cero100, precio = info
-            # Formatear información en HTML para mejor presentación
-            texto_html = f"""
-                <div style='font-family: "Segoe UI", Arial; color: #ffffff;'>
-                    <h2 style='color: #ff1a1a; margin-bottom: 15px;'>{marca.upper()} {modelo}</h2>
-                    <div style='background: rgba(255, 26, 26, 0.1); padding: 15px; border-radius: 8px;'>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>MARCA:</b> <span style='color: #ffffff;'>{marca}</span></p>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>MODELO:</b> <span style='color: #ffffff;'>{modelo}</span></p>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>AÑO:</b> <span style='color: #ffffff;'>{year}</span></p>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>VELOCIDAD MÁXIMA:</b> <span style='color: #ffffff; font-weight: bold;'>{vmax}</span></p>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>ACELERACIÓN 0-100 km/h:</b> <span style='color: #ffffff; font-weight: bold;'>{cero100}</span></p>
-                        <p style='margin: 8px 0;'><b style='color: #ff6666;'>PRECIO:</b> <span style='color: #00ff00; font-weight: bold;'>{precio}</span></p>
-                    </div>
-                </div>
-            """
-            self.info_label.setText(texto_html)
+    def _on_texto_obtenido(self, texto):
+        # detener animaciones
+        self._pulse_timer.stop()
+        self._set_indicator_idle()
+        self.speedometer.set_speed(180)  # Velocímetro a 180 cuando se obtiene texto
+
+        texto = texto.strip()
+        if not texto:
+            self.log_text.append(">>> No se obtuvo texto (o no se entendió).")
+            self.recognized_label.setText("No se entendió. Intenta de nuevo.")
+            self.speedometer.set_speed(0)  # Velocímetro a 0 si no hay texto
+            return
+
+        self.log_text.append(f">>> Reconocido: {texto}")
+        self.recognized_label.setText(texto)
+        self._handle_recognized_text(texto)
+
+    def _handle_recognized_text(self, texto):
+        marca = self._detectar_marca(texto)
+        if marca:
+            self._show_detected_brand(marca)
+            url = BRANDS.get(marca)
+            if url:
+                self.log_text.append(f">>> Abriendo sitio oficial: {url}")
+                webbrowser.open(url)
         else:
-            self.mostrar_mensaje(f"No se encontró en la base de datos: '{nombre_auto}'")
+            self.log_text.append(">>> No se detectó ninguna marca conocida en el texto.")
+            self.speedometer.set_speed(0)  # Velocímetro a 0 si no se detecta marca
 
-# ============================================================
-#  FUNCIÓN PRINCIPAL DE EJECUCIÓN
-# ============================================================
+    # -----------------------
+    # DETECCIÓN (simple, por substrings)
+    # -----------------------
+    def _detectar_marca(self, texto):
+        texto = texto.lower()
+        for key in BRAND_KEYS:
+            if key in texto:
+                return key
+        return None
+
+    # -----------------------
+    # MOSTRAR MARCA DETECTADA (con logo animado)
+    # -----------------------
+    def _show_detected_brand(self, key):
+        display = key.title()
+        self.marca_label.setText(f"Marca detectada: {display}")
+        self.speedometer.set_speed(240)  # Velocímetro a máximo cuando se detecta marca
+
+        # intentar cargar logo local <key>.png
+        logo_path = f"{key}.png"
+        if os.path.exists(logo_path):
+            pix = QPixmap(logo_path).scaled(self.logo_label.size(), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            self.logo_label.setPixmap(pix)
+        else:
+            # si no hay logo, mostramos un texto estilizado
+            self.logo_label.setText(display)
+            self.logo_label.setStyleSheet("""
+                color: #ffffff; 
+                font-weight: bold; 
+                font-size: 18px;
+                background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 rgba(40,40,50,150), stop:1 rgba(60,60,70,150));
+                border-radius: 10px;
+                border: 1px solid #555;
+            """)
+
+        # animación: hacemos un pequeño "pop" en el logo
+        anim = QPropertyAnimation(self.logo_label, b"geometry")
+        rect = self.logo_label.geometry()
+        anim.setDuration(350)
+        anim.setStartValue(QRect(rect.x(), rect.y() - 6, rect.width(), rect.height()))
+        anim.setEndValue(rect)
+        anim.setEasingCurve(QEasingCurve.OutBounce)
+        anim.start()
+
+    # -----------------------
+    # ABRIR MARCA (desde botón)
+    # -----------------------
+    def _open_brand(self, key):
+        url = BRANDS.get(key)
+        if url:
+            self.log_text.append(f">>> Abrir: {key.title()} — {url}")
+            webbrowser.open(url)
+            self.speedometer.set_speed(200)  # Velocímetro a 200 cuando se abre una marca
+        else:
+            self.log_text.append(f">>> URL no encontrada para {key}")
+
+    # -----------------------
+    # UTILIDADES
+    # -----------------------
+    def _show_all_urls(self):
+        txt = "Listado de marcas y URLs:\n\n"
+        for k, v in BRANDS.items():
+            txt += f"{k.title()}: {v}\n"
+        QMessageBox.information(self, "Marcas disponibles", txt)
+
+    def _on_theme_change(self, idx):
+        # Cambiamos esquema de color según el tema seleccionado
+        if idx == 0:  # Tema Deportivo
+            self.setStyleSheet("""
+                QWidget#root { 
+                    background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #0a0a0f, stop:0.5 #151520, stop:1 #1a1a25);
+                    color: white;
+                }
+            """)
+        elif idx == 1:  # Tema Clásico
+            self.setStyleSheet("""
+                QWidget#root { 
+                    background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #1a1a1a, stop:1 #2a2a2a);
+                    color: white;
+                }
+            """)
+        else:  # Tema Lujo
+            self.setStyleSheet("""
+                QWidget#root { 
+                    background: qlineargradient(x1:0 y1:0, x2:1 y2:1, stop:0 #0f0f1a, stop:1 #1a1a2f);
+                    color: white;
+                }
+            """)
+
+    def _show_about(self):
+        QMessageBox.information(self, "Acerca de",
+                                "AutoNavigator — Detector de Marcas por Voz\n\n"
+                                "Edición Deportiva con diseño automovilístico\n"
+                                "Incluye animaciones de coches y velocímetro interactivo\n\n"
+                                "Desarrollado con PyQt5.")
+
+
+# -----------------------
+# EJECUCIÓN
+# -----------------------
 def main():
-    """
-    Función principal que inicia la aplicación.
-    Secuencia de ejecución:
-    1. Crear y poblar base de datos
-    2. Inicializar aplicación Qt
-    3. Configurar estilo de la aplicación
-    4. Mostrar interfaz principal
-    5. Ejecutar loop de eventos
-    """
-    crear_y_poblar_bd()
-
     app = QApplication(sys.argv)
-    app.setStyle('Fusion')  # Estilo uniforme entre plataformas
-
-    ui = SupercarVoiceUI()
-    ui.show()
+    ventana = AutoGUI()
+    ventana.show()
     sys.exit(app.exec_())
+
 
 if __name__ == "__main__":
     main()
-
