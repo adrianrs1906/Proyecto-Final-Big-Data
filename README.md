@@ -1,124 +1,94 @@
-🏎️ Supercar Voice System - Ultimate Edition
-Sistema de consulta de información de superautos mediante reconocimiento de voz, desarrollado en Python con interfaz gráfica moderna.
+Requisitos del Sistema
+Para ejecutar AutoNavigator necesitas:
 
-🚀 Características Principales
-Reconocimiento de Voz: Búsqueda por comandos de voz en español
+Python 3.8 o versión superior instalado en tu sistema
 
-Base de Datos Integrada: 13 superautos con información detallada
+Un micrófono funcionando correctamente
 
-Interfaz Moderna: Diseño elegante con temática automovilística
+Conexión a internet activa (para el reconocimiento de voz y acceso a sitios web)
 
-Búsqueda por Texto: Alternativa tradicional de búsqueda
+Proceso de Instalación
+Paso 1: Descargar el Proyecto
+Primero, descarga el archivo BD11.py desde el repositorio de GitHub y guárdalo en una carpeta de tu preferencia.
 
-Animaciones y Efectos: Experiencia de usuario mejorada
+Paso 2: Crear Entorno Virtual (Recomendado)
+Abre tu terminal o línea de comandos y navega hasta la carpeta donde guardaste el archivo. Luego crea un entorno virtual ejecutando: python -m venv venv
 
-📋 Requisitos del Sistema
-Python 3.7 o superior
+Para activar el entorno virtual:
 
-Micrófono funcionando
+En Windows: venv\Scripts\activate
 
-Conexión a internet (para reconocimiento de voz)
+En Linux/Mac: source venv/bin/activate
 
-🔧 Instalación
-Paso 1: Clonar o descargar el proyecto
-bash
-git clone <https://github.com/adrianrs1906/Proyecto-Final-Big-Data.git>
-cd supercar-voice-system
+Paso 3: Instalar Dependencias
+Con el entorno virtual activado, instala las librerías necesarias ejecutando: pip install PyQt5 speechrecognition
 
-     1.1: Primero en un archivo de pycharm ejecutar el codigo donde se encuentra la Base de Datos. Posteriormente, en otro archivo distinto ejecutar el codigo con el modelo. 
+Para mejorar el rendimiento del audio, puedes instalar adicionalmente: pip install pyaudio
 
+Si encuentras problemas instalando pyaudio en Windows, puedes usar: pip install pipwin seguido de pipwin install pyaudio
 
-Paso 2: Crear entorno virtual (recomendado)
-bash
-python -m venv venv
-# En Windows:
-venv\Scripts\activate
-# En Linux/Mac:
-source venv/bin/activate
-Paso 3: Instalar dependencias
-bash
-pip install -r requirements.txt
-Si no tienes el archivo requirements.txt, instala manualmente:
+En sistemas Linux, si tienes dificultades, prueba instalando: sudo apt-get install python3-pyaudio portaudio19-dev
 
-bash
-pip install PyQt5 speechrecognition pyaudio
-Nota para Windows:
-Si tienes problemas con pyaudio, prueba:
+Ejecución del Programa
+Una vez completada la instalación, ejecuta el programa con el comando: python BD11.py
 
-bash
-pip install pipwin
-pipwin install pyaudio
-Nota para Linux:
-Puede que necesites instalar dependencias del sistema:
+La aplicación se iniciará mostrando una ventana con la interfaz automovilística.
 
-bash
-sudo apt-get install python3-pyaudio portaudio19-dev
-🎯 Ejecución
-bash
-python BD4.py
-🎤 Uso del Sistema
-Búsqueda por Voz:
-Haz clic en "🎤 BUSCAR POR VOZ"
+Guía de Uso
+Búsqueda por Voz
+Haz clic en el botón grande "🎤 ACTIVAR COMANDO DE VOZ"
 
-Espera el mensaje "Escuchando..."
+Espera a que el indicador visual cambie a rojo y veas el mensaje "Estado: escuchando..."
 
-Di claramente el nombre del auto (ej: "ferrari 488 gtb")
+Di claramente el nombre de la marca que deseas buscar (por ejemplo: "ferrari", "lamborghini", "porsche")
 
-El sistema mostrará automáticamente la información
+El sistema procesará tu voz, detectará la marca y abrirá automáticamente el sitio web oficial
 
-Búsqueda por Texto:
-Escribe el nombre en el campo de búsqueda
+Búsqueda por Texto
+Escribe el nombre de la marca en el campo de texto ubicado en la parte izquierda de la interfaz
 
-Haz clic en "📝 BUSCAR POR TEXTO" o presiona Enter
+Presiona la tecla Enter o haz clic en el botón "ABRIR"
 
-Selección Directa:
-Haz clic en cualquier auto de la lista
+El sistema buscará la marca y abrirá su sitio web oficial
 
-🗂️ Autos Disponibles
-Ferrari 488 GTB
+Selección Manual Rápida
+En la sección inferior derecha de la interfaz encontrarás botones con todas las marcas disponibles
 
-Lamborghini Huracán Evo
+Haz clic directamente en cualquier botón de marca para acceder instantáneamente a su sitio web
 
-Bugatti Chiron
+Usa la opción "VER TODAS LAS URLS" del menú para ver un listado completo
 
-McLaren P1
+Marcas Disponibles
+El sistema incluye 30 marcas organizadas en tres categorías:
 
-Porsche 918 Spyder
+Marcas Deportivas: Ferrari, Lamborghini, Bugatti, McLaren, Porsche, Koenigsegg, Pagani, Aston Martin, Rimac, Maserati
 
-Koenigsegg Agera RS
+Marcas de Lujo: Mercedes-Benz, BMW, Audi, Lexus, Bentley, Rolls-Royce, Jaguar, Land Rover, Volvo, Infiniti
 
-Pagani Huayra
+Marcas Generales: Toyota, Honda, Nissan, Ford, Chevrolet, Dodge, Subaru, Alfa Romeo, Citroën, Acura
 
-Aston Martin Valkyrie
+Solución de Problemas Comunes
+Si el Reconocimiento de Voz No Funciona:
+Verifica que el micrófono esté correctamente conectado y configurado
 
-Rimac Nevera
+Comprueba los permisos de la aplicación para acceder al micrófono
 
-Ferrari SF90 Stradale
+Asegúrate de tener conexión a internet activa
 
-Lamborghini Aventador SVJ
+Habla claramente y en un entorno con poco ruido ambiental
 
-Bugatti Divo
+Si persisten los problemas, usa el método de búsqueda por texto
 
-Maserati MC20
+Si la Aplicación No Inicia:
+Confirma que tienes Python 3.8 o superior instalado
 
-🛠️ Solución de Problemas
-Error de Micrófono:
-Verifica que el micrófono esté conectado
+Verifica que todas las dependencias estén correctamente instaladas
 
-Revisa los permisos de la aplicación
+Asegúrate de que el archivo BD11.py esté completo y sin modificaciones
 
-Prueba en un entorno silencioso
+Si el Audio Presenta Problemas:
+En Windows, intenta usar pipwin para instalar pyaudio
 
-Error de Reconocimiento:
-Habla claramente y a un ritmo normal
+En Linux, instala las dependencias del sistema mencionadas anteriormente
 
-Usa nombres completos (marca + modelo)
-
-Verifica tu conexión a internet
-
-La aplicación no inicia:
-Asegúrate de tener Python 3.7+
-
-Verifica que todas las dependencias estén instaladas
-
-Revisa que el archivo BD4.py esté completo
+Verifica que los controladores de audio estén actualizados
